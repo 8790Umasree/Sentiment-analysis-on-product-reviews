@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Review Sentiment Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-chart-line"></i> Product Review Sentiment Analyzer</h1>
+            <p>Analyze customer reviews to understand sentiment - Positive, Negative, or Neutral</p>
+        </header>
+
+        <main>
+            <!-- Input Form -->
+            <div class="form-section">
+                <h2><i class="fas fa-edit"></i> Analyze a Review</h2>
+                <form id="reviewForm">
+                    <div class="input-group">
+                        <label for="productName">Product Name:</label>
+                        <input type="text" id="productName" placeholder="e.g., iPhone 15, Samsung TV, Nike Shoes" required>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="reviewText">Customer Review:</label>
+                        <textarea id="reviewText" placeholder="Enter the customer review here..." rows="4" required></textarea>
+                    </div>
+                    
+                    <button type="submit" id="analyzeBtn">
+                        <i class="fas fa-search"></i> Analyze Sentiment
+                    </button>
+                </form>
+            </div>
+
+            <!-- Results Section -->
+            <div id="results" class="results-section" style="display: none;">
+                <h2><i class="fas fa-chart-bar"></i> Analysis Results</h2>
+                <div id="resultContent"></div>
+            </div>
+
+            <!-- Statistics Section -->
+            <div class="stats-section">
+                <h2><i class="fas fa-chart-pie"></i> Review Statistics</h2>
+                <div id="statsContent">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Reviews:</span>
+                        <span id="totalReviews">0</span>
+                    </div>
+                    <div class="stat-item positive">
+                        <span class="stat-label">Positive:</span>
+                        <span id="positiveCount">0</span>
+                    </div>
+                    <div class="stat-item negative">
+                        <span class="stat-label">Negative:</span>
+                        <span id="negativeCount">0</span>
+                    </div>
+                    <div class="stat-item neutral">
+                        <span class="stat-label">Neutral:</span>
+                        <span id="neutralCount">0</span>
+                    </div>
+                </div>
+                <button id="refreshStats" class="secondary-btn">
+                    <i class="fas fa-sync-alt"></i> Refresh Stats
+                </button>
+            </div>
+
+            <!-- Recent Reviews Section -->
+            <div class="reviews-section">
+                <h2><i class="fas fa-list"></i> Recent Reviews</h2>
+                <div id="reviewsList"></div>
+                <button id="loadReviews" class="secondary-btn">
+                    <i class="fas fa-download"></i> Load Recent Reviews
+                </button>
+                <button id="clearReviews" class="danger-btn">
+                    <i class="fas fa-trash"></i> Clear All Reviews
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // DOM elements
+        const reviewForm = document.getElementById('reviewForm');
+        const productName = document.getElementById('productName');
+        const reviewText = document.getElementById('reviewText');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const results = document.getElementById('results');
+        const resultContent = document.getElementById('resultContent');
+        const refreshStats = document.getElementById('refreshStats');
+        const loadReviews = document.getElementById('loadReviews');
+        const clearReviews = document.getElementById('clearReviews');
+        const reviewsList = document.getElementById('reviewsList');
+
+        // Form submission
+        reviewForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const product = productName.value.trim();
+            const review = reviewText.value.trim();
+            
+            if (!product || !review) {
+                alert('Please fill in both fields');
+                return;
+            }
+
+            // Show loading state
+            analyzeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            analyzeBtn.disabled = true;
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        product: product,
+                        review: review
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayResults(data);
+                    updateStats();
+                    reviewText.value = '';
+                    productName.value = '';
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Network error: ' + error.message);
+            } finally {
+                analyzeBtn.innerHTML = '<i class="fas fa-search"></i> Analyze Sentiment';
+                analyzeBtn.disabled = false;
+            }
+        });
+
+        // Display analysis results
+        function displayResults(data) {
+            const sentimentClass = data.sentiment;
+            const confidenceBar = Math.min(data.confidence, 100);
+            const currentReviewText = reviewText.value || 'Review text not available';
+            
+            resultContent.innerHTML = `
+                <div class="result-card ${sentimentClass}">
+                    <div class="result-header">
+                        <h3>${getSentimentIcon(data.sentiment)} ${data.sentiment.toUpperCase()}</h3>
+                        <span class="confidence">Confidence: ${data.confidence}%</span>
+                    </div>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill ${sentimentClass}" style="width: ${confidenceBar}%"></div>
+                    </div>
+                    <div class="product-info">
+                        <strong>Product:</strong> ${data.product || 'Unknown Product'}
+                    </div>
+                    <div class="review-preview">
+                        <strong>Review:</strong> "${currentReviewText.substring(0, 100)}${currentReviewText.length > 100 ? '...' : ''}"
+                    </div>
+                </div>
+            `;
+            
+            results.style.display = 'block';
+            results.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Get sentiment icon
+        function getSentimentIcon(sentiment) {
+            switch(sentiment) {
+                case 'positive': return '<i class="fas fa-smile"></i>';
+                case 'negative': return '<i class="fas fa-frown"></i>';
+                case 'neutral': return '<i class="fas fa-meh"></i>';
+                default: return '<i class="fas fa-question"></i>';
+            }
+        }
+
+        // Update statistics
+        async function updateStats() {
+            try {
+                const response = await fetch('/stats');
+                const data = await response.json();
+                
+                document.getElementById('totalReviews').textContent = data.total_reviews;
+                document.getElementById('positiveCount').textContent = data.positive;
+                document.getElementById('negativeCount').textContent = data.negative;
+                document.getElementById('neutralCount').textContent = data.neutral;
+            } catch (error) {
+                console.error('Error updating stats:', error);
+            }
+        }
+
+        // Load recent reviews
+        async function loadRecentReviews() {
+            try {
+                const response = await fetch('/reviews');
+                const data = await response.json();
+                
+                if (data.reviews && data.reviews.length > 0) {
+                    const reviewsHtml = data.reviews.slice(-5).reverse().map(review => `
+                        <div class="review-item ${review.sentiment}">
+                            <div class="review-header">
+                                <span class="product-name">${review.product}</span>
+                                <span class="sentiment-badge ${review.sentiment}">
+                                    ${getSentimentIcon(review.sentiment)} ${review.sentiment}
+                                </span>
+                            </div>
+                            <div class="review-text">"${review.review.substring(0, 150)}${review.review.length > 150 ? '...' : ''}"</div>
+                            <div class="review-confidence">Confidence: ${review.confidence}%</div>
+                        </div>
+                    `).join('');
+                    
+                    reviewsList.innerHTML = reviewsHtml;
+                } else {
+                    reviewsList.innerHTML = '<p class="no-reviews">No reviews yet. Analyze some reviews to see them here!</p>';
+                }
+            } catch (error) {
+                reviewsList.innerHTML = '<p class="error">Error loading reviews.</p>';
+            }
+        }
+
+        // Clear all reviews
+        async function clearAllReviews() {
+            if (confirm('Are you sure you want to clear all reviews? This action cannot be undone.')) {
+                try {
+                    const response = await fetch('/clear');
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        updateStats();
+                        reviewsList.innerHTML = '<p class="no-reviews">All reviews cleared.</p>';
+                        results.style.display = 'none';
+                    } else {
+                        alert('Error clearing reviews');
+                    }
+                } catch (error) {
+                    alert('Network error: ' + error.message);
+                }
+            }
+        }
+
+        // Event listeners
+        refreshStats.addEventListener('click', updateStats);
+        loadReviews.addEventListener('click', loadRecentReviews);
+        clearReviews.addEventListener('click', clearAllReviews);
+
+        // Initialize page
+        updateStats();
+        loadRecentReviews();
+    </script>
+</body>
+</html>
